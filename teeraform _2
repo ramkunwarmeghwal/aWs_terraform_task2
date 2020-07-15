@@ -1,0 +1,182 @@
+1:Developed a infrastructure as code using terraform , which automatically create a VPC.
+2:in that vpc we have to create two subnets:
+  a: public subnet[accesible for Public World].
+  b: private subnet[Restricted for Public World].
+3:Create  a public facing internet gateway for connect our vpc/network to the internet world and attach this getway to our vpc.
+4:Create a routing table for internet gateway so that instance can connect to outside world,update and associacte it with public subnet.
+5:Launch an ec2 instance with security allowing port 80 so that our client can connect  to our wordpress site also attch the key to insance for further login with into it.
+6:Launch an ec2 instance which has MYSQL setup already  with security group 3306 in private subnet with the same.
+  Also attach the key with the same.
+
+provider "aws" {
+  region     = "ap-south-1"
+  profile   = "myvimal"
+}
+
+
+resource "aws_vpc" "main" {
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "main"
+  }
+}
+
+resource "aws_subnet" "main" {
+  vpc_id     = "${aws_vpc.main.id}"
+  cidr_block = "10.0.1.0/24"
+
+  tags = {
+    Name = "Main"
+  }
+}
+
+resource "aws_internet_gateway" "gw" {
+vpc_id = "${aws_vpc.main.id}"
+
+  tags = {
+    Name = "main"
+   }
+}
+
+
+
+resource "aws_route_table" "eu-west-1a-public" {
+    vpc_id = "${aws_vpc.main.id}"
+     
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = "${aws_internet_gateway.gw.id}"
+    }
+}
+
+
+resource "aws_route_table_association" "eu-west-1a-public" {
+    subnet_id = "${aws_subnet.main.id}"
+    route_table_id = "${aws_route_table.eu-west-1a-public.id}"
+}
+
+
+/*private subnet*/
+
+resource "aws_subnet" "main12" {
+  vpc_id     = "${aws_vpc.main.id}"
+  cidr_block = "10.0.0.0/24"
+  availability_zone = "ap-south-1b"
+  tags = {
+    Name = "main12"
+   }
+}
+
+
+
+
+variable "enter_ur_key_name" {
+          type = string
+          default = "mykey1111"
+}
+resource "aws_instance"  "myin" {
+  ami           = "ami-0447a12f28fddb066"
+  instance_type = "t2.micro"
+  key_name      =  var.enter_ur_key_name
+  vpc_security_group_ids  =  ["${aws_security_group.My_VPC_Security_Group.id}"] 
+  subnet_id       =     "${aws_subnet.main.id}"
+  associate_public_ip_address = true
+  tags = {
+    Name = "coronaWorld"
+  }
+  depends_on = [aws_security_group.My_VPC_Security_Group ,]
+} 
+
+
+resource "aws_security_group" "nat" {
+    name = "vpc_nat"
+    description = "Allow traffic to pass from the private subnet to the internet"
+
+    ingress {
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = [ "10.0.1.0/24" ]
+    }
+    ingress {
+        from_port = 443
+        to_port = 443
+        protocol = "tcp"
+        cidr_blocks = [ "10.0.1.0/24" ]
+    }
+    ingress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    ingress {
+        from_port = -1
+        to_port = -1
+        protocol = "icmp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    egress {
+        from_port = 80
+        to_port = 80
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    egress {
+        from_port = 443
+        to_port = 443
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    egress {
+        from_port = 22
+        to_port = 22
+        protocol = "tcp"
+        cidr_blocks = [ "10.0.0.0/16" ]
+    }
+    egress {
+        from_port = -1
+        to_port = -1
+        protocol = "icmp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    vpc_id = "${aws_vpc.main.id}"
+
+}
+
+
+/*
+# Create the Security Group
+resource "aws_security_group" "My_VPC_Security_Group" {
+  vpc_id       = aws_vpc.main.id
+  name         = "My VPC Security Group"
+  description  = "My VPC Security Group"
+  
+  # allow ingress of port 22
+  ingress {
+      
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+  } 
+  
+  # allow egress of all ports
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+tags = {
+   Name = "My VPC Security Group"
+   Description = "My VPC Security Group"
+}
+ depends_on = [aws_vpc.main,]
+}
+
+
+*/
